@@ -89,5 +89,6 @@ This command builds and deploys the application to AWS.
 * header : Authorization=Bearer ${user_token}
 
 ## Note
-The login function is intended for testing purposes only and is not recommended for deployment in a real-world scenario. User authentication should be handled on the frontend.
-
+* The login function is intended for testing purposes only and is not recommended for deployment in a real-world scenario. User authentication should be handled on the frontend.
+* you must change userPoolId and ClientId to the new value in login function 
+* environment variables like userPoolId and clientId will assign automatically after deployment and work correctly in deployment but in case run locally in many device you should change variables manually
