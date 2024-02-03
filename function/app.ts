@@ -124,14 +124,14 @@ export const login = async (event: APIGatewayProxyEvent): Promise<APIGatewayProx
         console.log('After authenticateUser promise');
 
         // Use await to wait for the asynchronous operation to complete
-        await authenticateUser();
+        const result = await authenticateUser();
 
         console.log('Exiting login function successfully');
 
         return {
             statusCode: 200,
             body: JSON.stringify({
-                message: 'Success',
+                message: result,
             }),
         };
     } catch (err) {
