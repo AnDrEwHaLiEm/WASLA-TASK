@@ -55,8 +55,8 @@ This command builds and deploys the application to AWS.
 * endpoint: register
 * body : `{
     "email": "user@example.com",
-    "given_name": "John",
-    "family_name": "Doe",
+    "given_name": "andrew",
+    "family_name": "haliem",
     "password": "your_password"
 }`
 
