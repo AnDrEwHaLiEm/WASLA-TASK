@@ -1,0 +1,428 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Authentication
+
+  Sample SAM Template for Authentication
+Globals:
+  Function:
+    Timeout: 3
+    MemorySize: 128
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref TaskTable
+        USER_POOL_ID: !Ref WASLAUserPool
+        USER_POOL_CLIENT_ID: !Ref UserPoolClient
+
+Resources:
+  
+  # Cognito User Pool
+  WASLAUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: 'WASLAUserPool'
+      UsernameAttributes:
+      - email
+      AutoVerifiedAttributes:
+      - email
+      Schema:
+      - Name: email
+        Required: true
+        Mutable: false
+        AttributeDataType: "String"
+      - Name: given_name
+        Required: true
+        Mutable: true
+        AttributeDataType: "String"
+      - Name: family_name
+        Required: true
+        Mutable: true
+        AttributeDataType: "String"
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+  
+  # Cognito User Pool Client
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: 'WASLAUserPoolClient'
+      UserPoolId: !Ref WASLAUserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_ADMIN_USER_PASSWORD_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_SRP_AUTH
+      AllowedOAuthFlows:
+        - implicit
+      AllowedOAuthScopes:
+        - email
+        - openid
+      CallbackURLs:
+        - 'http://localhost:3000'
+      LogoutURLs:
+        - 'http://localhost:3000'
+      SupportedIdentityProviders:
+        - COGNITO
+      WriteAttributes:
+        - email
+        - given_name
+        - family_name
+  
+
+  # create dynamodb table Task
+  TaskTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: TaskTable
+      AttributeDefinitions:
+        - AttributeName: _id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: _id
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
+  # Layers
+  AppLayers:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: AppLayers
+      ContentUri: ./Layers
+      CompatibleRuntimes:
+      - nodejs18.x
+      RetentionPolicy: Retain
+
+
+  AuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: authorizer
+      Handler: authorizer.handler
+      Runtime: nodejs18.x
+      Architectures:
+      - x86_64
+      Layers:
+      - !Ref AppLayers
+      Policies:
+      - Statement:
+        - Effect: Allow
+          Action:
+          - cognito-idp:AdminInitiateAuth
+          - cognito-idp:AdminRespondToAuthChallenge
+          Resource: "*"
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: true
+        EntryPoints:
+        - authorizer.ts
+        External:
+        - aws-sdk
+        - aws-jwt-verify
+  
+
+  # API Gateway
+  MyApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Cors:
+        AllowOrigin: "'*'"
+        AllowHeaders: "'*'"
+        AllowMethods: "'*'"
+      Auth:
+        Authorizers:
+          UserAuthorizer:
+            FunctionPayloadType: TOKEN
+            FunctionArn: !GetAtt AuthorizerFunction.Arn
+            Identity:
+              Headers:
+              - Authorization
+              ReauthorizeEvery: 300
+            ResultTtlInSeconds: 300
+            IdentityValidationExpression: '(.*)'
+            AuthorizerResultTtlInSeconds: 300
+
+  
+ 
+
+  # Register Function
+  RegisterFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: function/
+      Handler: app.register
+      Runtime: nodejs18.x
+      Architectures:
+        - x86_64
+      Events:
+        RegisterApi:
+          Type: Api 
+          Properties:
+            RestApiId: !Ref MyApi
+            Path: /register
+            Method: post
+      Layers:
+        - !Ref AppLayers
+      Policies: 
+      - Statement:
+        - Effect: Allow
+          Action:
+          - cognito-idp:*
+          Resource: "*"
+    Metadata: 
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+        EntryPoints: 
+        - app.ts
+        External:
+        - aws-sdk
+  
+  # login Function this function will be used to test login locally . login should be done in client side
+  LoginFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: function/
+      Handler: app.login
+      Runtime: nodejs18.x
+      Architectures:
+        - x86_64
+      Timeout: 10
+      Events:
+        LoginApi:
+          Type: Api 
+          Properties:
+            RestApiId: !Ref MyApi
+            Path: /login
+            Method: post
+      Layers:
+        - !Ref AppLayers
+      Policies: 
+      - Statement:
+        - Effect: Allow
+          Action:
+          - cognito-idp:*
+          Resource: "*"
+      - Statement:
+        - Effect: Allow
+          Action:
+          - lambda:InvokeFunction
+          Resource: "*"
+    Metadata: 
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+        EntryPoints: 
+        - app.ts
+        External:
+        - aws-sdk
+
+  #CRUD Task Function
+  CreateTaskFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: function/
+      Handler: task.createTask
+      Runtime: nodejs18.x
+      Architectures:
+        - x86_64
+      Events:
+        CreateTaskApi:
+          Type: Api 
+          Properties:
+            Path: /task
+            Method: post
+            RestApiId: !Ref MyApi
+            Auth:
+              Authorizer: UserAuthorizer
+      Layers:
+        - !Ref AppLayers
+      Policies: 
+      - DynamoDBCrudPolicy:
+          TableName: !Ref TaskTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - cognito-idp:*
+          Resource: "*"
+    Metadata: 
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+        EntryPoints: 
+        - task.ts
+        External:
+        - aws-sdk
+
+  GetAllUserTasksFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: function/
+      Handler: task.getUserTasks
+      Runtime: nodejs18.x
+      Architectures:
+        - x86_64
+      Events:
+        GetAllUserTasksApi:
+          Type: Api 
+          Properties:
+            Path: /task
+            Method: get
+            RestApiId: !Ref MyApi
+            Auth:
+              Authorizer: UserAuthorizer
+      Layers:
+        - !Ref AppLayers
+      Policies: 
+      - DynamoDBReadPolicy:
+          TableName: !Ref TaskTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - cognito-idp:*
+          Resource: "*"
+    Metadata: 
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+        EntryPoints: 
+        - task.ts
+        External:
+        - aws-sdk
+  
+  UpdateTaskFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: function/
+      Handler: task.updateTask
+      Runtime: nodejs18.x
+      Architectures:
+        - x86_64
+      Events:
+        UpdateTaskApi:
+          Type: Api 
+          Properties:
+            Path: /task/{_id}
+            Method: put
+            RestApiId: !Ref MyApi
+            Auth:
+              Authorizer: UserAuthorizer
+      Layers:
+        - !Ref AppLayers
+      Policies: 
+      - DynamoDBCrudPolicy:
+          TableName: !Ref TaskTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - cognito-idp:*
+          Resource: "*"
+    Metadata: 
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+        EntryPoints: 
+        - task.ts
+        External:
+        - aws-sdk
+
+  DeleteTaskFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: function/
+      Handler: task.deleteTask
+      Runtime: nodejs18.x
+      Architectures:
+        - x86_64
+      Events:
+        DeleteTaskApi:
+          Type: Api 
+          Properties:
+            Path: /task/{_id}
+            Method: delete
+            RestApiId: !Ref MyApi
+            Auth:
+              Authorizer: UserAuthorizer
+      Layers:
+        - !Ref AppLayers
+      Policies: 
+      - DynamoDBCrudPolicy:
+          TableName: !Ref TaskTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - cognito-idp:*
+          Resource: "*"
+    Metadata: 
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+        EntryPoints: 
+        - task.ts
+        External:
+        - aws-sdk
+
+Outputs:
+  RegisterApi:
+    Description: "API Gateway endpoint URL for Prod stage for Register function"
+    Value: !Sub "https://${MyApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/register/"
+  RegisterFunction:
+    Description: "Register Lambda Function ARN"
+    Value: !GetAtt RegisterFunction.Arn
+  CreateTaskApi:
+    Description: "API Gateway endpoint URL for Prod stage for CreateTask function"
+    Value: !Sub "https://${MyApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/task/"
+  CreateTaskFunction:
+    Description: "CreateTask Lambda Function ARN"
+    Value: !GetAtt CreateTaskFunction.Arn
+  GetAllUserTasksApi:
+    Description: "API Gateway endpoint URL for Prod stage for GetAllUserTasks function"
+    Value: !Sub "https://${MyApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/task/"
+  GetAllUserTasksFunction:
+    Description: "GetAllUserTasks Lambda Function ARN"
+    Value: !GetAtt GetAllUserTasksFunction.Arn
+  UpdateTaskApi:
+    Description: "API Gateway endpoint URL for Prod stage for UpdateTask function"
+    Value: !Sub "https://${MyApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/task/{_id}"
+  UpdateTaskFunction:
+    Description: "UpdateTask Lambda Function ARN"
+    Value: !GetAtt UpdateTaskFunction.Arn
+  DeleteTaskApi:
+    Description: "API Gateway endpoint URL for Prod stage for DeleteTask function"
+    Value: !Sub "https://${MyApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/task/{_id}"
+  DeleteTaskFunction:
+    Description: "DeleteTask Lambda Function ARN"
+    Value: !GetAtt DeleteTaskFunction.Arn
+  WASLAUserPool:
+    Description: "WASLA User Pool"
+    Value: !Ref WASLAUserPool
+  UserPoolClient:
+    Description: "WASLA User Pool Client"
+    Value: !Ref UserPoolClient
+    
+
