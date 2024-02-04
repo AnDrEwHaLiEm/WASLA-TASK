@@ -41,13 +41,11 @@ npm run deploy
 This command builds and deploys the application to AWS.
 
 ## Project Structure
-- Lambda Functions: The project includes five Lambda functions:
+- Lambda Functions: The project includes six Lambda functions:
 
-* register: Handles user registration.
+* register: Handles user registration ,login
 * createTask, getUserTasks, updateTask, deleteTask: Implement CRUD operations on tasks.
-* login: A function for obtaining a user's JWT token (intended for testing purposes and should be handled on the frontend in a real-world scenario).
 * Authorizer: The application uses Cognito User Pool for Lambda authorizer.
-
 * DynamoDB Table: The DynamoDB table named taskTable stores task information.
 ## API Endpoints
 ### Register User
@@ -59,6 +57,33 @@ This command builds and deploys the application to AWS.
     "family_name": "haliem",
     "password": "your_password"
 }`
+
+### login User
+* method: POST
+* endpoint: login
+* body : `{
+    "email": "user@example.com",
+    "password": "your_password"
+}`
+* response body : `{
+  {
+    "message": {
+        "$metadata": {
+            "httpStatusCode": 200,
+            "requestId": "5993b05b-0f8a-4da6-a1b0-ca2e235bafb2",
+            "attempts": 1,
+            "totalRetryDelay": 0
+        },
+        "AuthenticationResult": {
+            "AccessToken": {AccessToken},
+            "ExpiresIn": 3600,
+            "IdToken": {IdToken}, // use this for user token
+            "RefreshToken": {RefreshToken},
+            "TokenType": "Bearer"
+        },
+        "ChallengeParameters": {}
+    }
+  }`
 
 ### create task
 * method: POST
@@ -88,7 +113,9 @@ This command builds and deploys the application to AWS.
 * endpoint: task/{task_id}
 * header : Authorization=Bearer ${user_token}
 
+## Postman Apis
+ - [Api-documentation] (https://documenter.getpostman.com/view/27394446/2s9YywdJcY)
+  
 ## Note
-* The login function is intended for testing purposes only and is not recommended for deployment in a real-world scenario. User authentication should be handled on the frontend.
-* you must change userPoolId and ClientId to the new value in login function 
+
 * environment variables like userPoolId and clientId will assign automatically after deployment and work correctly in deployment but in case run locally in many device you should change variables manually
