@@ -119,3 +119,8 @@ This command builds and deploys the application to AWS.
 ## Note
 
 * environment variables like userPoolId and clientId will assign automatically after deployment and work correctly in deployment but in case run locally in many device you should change variables manually
+
+* change endpoint you will find in postman to your new endpoint 
+```
+https://eiv0mv5dlj.execute-api.us-east-1.amazonaws.com => your new endpoint will find it in output section after deploy
+```
