@@ -114,7 +114,7 @@ This command builds and deploys the application to AWS.
 * header : Authorization=Bearer ${user_token}
 
 ## Postman Apis
- - [Api-documentation] (https://documenter.getpostman.com/view/27394446/2s9YywdJcY)
+ - [Api documentation](https://documenter.getpostman.com/view/27394446/2s9YywdJcY/)
   
 ## Note
 
