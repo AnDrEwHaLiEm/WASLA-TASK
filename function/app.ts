@@ -1,5 +1,5 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { CognitoIdentityProviderClient, SignUpCommand,AdminConfirmSignUpCommand } from "@aws-sdk/client-cognito-identity-provider";
+import { CognitoIdentityProviderClient, SignUpCommand, AdminConfirmSignUpCommand, InitiateAuthCommand, AuthFlowType } from "@aws-sdk/client-cognito-identity-provider";
 import * as AmazonCognitoIdentity from 'amazon-cognito-identity-js';
 
 const USER_POOL_ID = process.env.USER_POOL_ID
@@ -86,47 +86,23 @@ export const login = async (event: APIGatewayProxyEvent): Promise<APIGatewayProx
         console.log('Request body:', body);
 
         const { email, password } = body;
-        const authenticationData = {
-            Username: email,
-            Password: password,
-        };
-        const authenticationDetails = new AmazonCognitoIdentity.AuthenticationDetails(authenticationData);
-        const poolData = {
-            UserPoolId: "us-east-1_7aWuYWReN",
-            ClientId: "5rg6qkvdt68r62booo7cu2efje",
-        };
-        const userPool = new AmazonCognitoIdentity.CognitoUserPool(poolData);
-        const userData = {
-            Username: email,
-            Pool: userPool,
-        };
-        const cognitoUser = new AmazonCognitoIdentity.CognitoUser(userData);
+        
 
         console.log('Before authenticateUser promise');
 
-        // Use promisify to convert authenticateUser to a promise
-        const authenticateUser = (): Promise<any> => {
-            return new Promise((resolve, reject) => {
-                console.log('Inside authenticateUser promise');
-                cognitoUser.authenticateUser(authenticationDetails, {
-                    onSuccess: (result) => {
-                        console.log('Authentication successful:', result);
-                        resolve(result);
-                    },
-                    onFailure: (err) => {
-                        console.error('Authentication failed:', err);
-                        reject(err);
-                    },
-                });
-            });
+        const client = new CognitoIdentityProviderClient();
+        const input = {
+            AuthFlow: 'USER_PASSWORD_AUTH' as AuthFlowType,
+            ClientId: USER_POOL_CLIENT_ID as string,
+            AuthParameters: {
+                USERNAME: email,
+                PASSWORD: password
+            },
         };
+        const command = new InitiateAuthCommand(input);
+        const result = await client.send(command);
 
         console.log('After authenticateUser promise');
-
-        // Use await to wait for the asynchronous operation to complete
-        const result = await authenticateUser();
-
-        console.log('Exiting login function successfully');
 
         return {
             statusCode: 200,
